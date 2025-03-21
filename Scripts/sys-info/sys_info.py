@@ -3,38 +3,174 @@ import platform
 from datetime import datetime
 import pyfiglet
 from colorama import Fore, Style, init
-from tabulate import tabulate
+import os
+
+#reference: https://thepythoncode.com/article/get-hardware-system-information-python
 
 #initializing colorama
 init()
 
-def get_sys_header():
-    head = pyfiglet.figlet_format("System Info", font="slant")
-    return f"{Fore.CYAN}{head}{Style.RESET_ALL}"
+def print_sys_header():
 
-def get_sys_info():
-    #get basic sys info
+    head = pyfiglet.figlet_format("System Overview", font="slant")
+    print(f"{Fore.CYAN}{head}{Style.RESET_ALL}")
+
+def print_sys_info():
+
+    print(f"{Fore.GREEN}** SYSTEM INFORMATION:{Style.RESET_ALL}")
+
     uname = platform.uname()
-    sys_info = [
-        ["System", uname.system],
-        ["Node Name", uname.node],
-        ["Release", uname.release],
-        ["Version", uname.version],
-        ["Machine", uname.machine],
-        ["Processor", uname.processor]
-    ]
-    return sys_info
 
-def get_sys_mem():
+    sys_info = {
+        "system": uname.system,
+        "node name": uname.node,
+        "release": uname.release,
+        "version": uname.version,
+        "machine": uname.machine,
+        "processor": uname.processor
+    }
+    print_dict(sys_info)
+
+def print_boot_time():
+
+    bt = datetime.fromtimestamp(psutil.boot_time())
+    print(f"{Fore.GREEN}** BOOT TIME:-------- {bt.year}/{bt.month}/{bt.day} {bt.hour}:{bt.minute}:{bt.second}{Style.RESET_ALL}")
+
+def print_cpu_info():
+
+    print(f"{Fore.GREEN}** CPU INFORMATION:{Style.RESET_ALL}")
+
+    cpufreq = psutil.cpu_freq()
+
+    #format per core str
+    pad = 23
+    dash = 7
+    pc = ""
+    for i, percentage in enumerate(psutil.cpu_percent(percpu=True, interval=1)):
+        pc += f"Core {i + 1}: {percentage}%\n" + " " * pad + "-" * dash + " "
+    pc = pc[:-(pad + dash + 2)]
+
+    cpu_info = {
+        "physical cores": psutil.cpu_count(logical=False),
+        "total cores": psutil.cpu_count(logical=True),
+        "max frequency": f"{cpufreq.max:.2f}Mhz",
+        "min frequency": f"{cpufreq.min:.2f}Mhz",
+        "current frequency": f"{cpufreq.current:.2f}Mhz",
+        "CPU usage per core": pc,
+        "total CPU usage": f"{psutil.cpu_percent()}%"
+    }
+
+    print_dict(cpu_info)
+
+def print_sys_mem():
+
+    print(f"{Fore.GREEN}** MEMORY USAGE:{Style.RESET_ALL}")
+
     vm = psutil.virtual_memory()
-    sys_mem = [
-        ["Total", vm.total],
-        ["Available", vm.available],
-        ["Percent", vm.percent],
-        ["Used", vm.used],
-        ["Free", vm.free]
-    ]
-    return sys_mem
+    sm = psutil.swap_memory()
+
+    sys_mem = {
+        "total": format_bytes(vm.total),
+        "available": format_bytes(vm.available),
+        "used": format_bytes(vm.used),
+        "percent": f"{vm.percent}%"
+    }
+
+    swap_mem = {
+        "total": format_bytes(sm.total),
+        "free": format_bytes(sm.free),
+        "used": format_bytes(sm.used),
+        "percent": f"{sm.percent}%"
+    }
+    
+    print_dict(sys_mem)
+    print(" * SWAP Memory:")
+    print_dict(swap_mem)
+
+def print_disk_use():
+
+    print(f"{Fore.GREEN}** DISK USAGE:{Style.RESET_ALL}")
+
+    #get all partitions
+    print(" * Partitions:")
+    part = psutil.disk_partitions()
+    for p in part:
+
+        print(f"  - Device:----------------- {p.device}")
+
+        p_dict = {
+            "mountpoint": p.mountpoint,
+            "file system type": p.fstype
+        }
+
+        try:
+            p_usage = psutil.disk_usage(p.mountpoint)
+        except PermissionError:
+            continue
+
+        p_dict["total size"] = format_bytes(p_usage.total)
+        p_dict["used"] = format_bytes(p_usage.used)
+        p_dict["free"] = format_bytes(p_usage.free)
+        p_dict["percentage"] = str(p_usage.percent) + "%"
+
+        print_dict(p_dict)
+
+    #get io stats
+    print(" * Disk I/O:")
+    disk_io = psutil.disk_io_counters()
+    io_dict = {
+        "total read": format_bytes(disk_io.read_bytes),
+        "total write": format_bytes(disk_io.write_bytes)
+    }
+
+    print_dict(io_dict)
+
+def print_net_info():
+
+    print(f"{Fore.GREEN}** NETWORK INFORMATION:{Style.RESET_ALL}")
+
+    print(" * Network Interfaces:")
+    if_addrs = psutil.net_if_addrs()
+    
+    # Track if we've already printed an interface
+    printed_interfaces = set()
+    
+    for interface_name, interface_addresses in if_addrs.items():
+        print(f"  - Interface: {interface_name}")
+        
+        for address in interface_addresses:
+            # Debug output
+            print(f"    Debug - Address family: {address.family}")
+            
+            addr_dict = {}
+            # Use the numeric values directly or constants from psutil
+            if address.family == 2:  # AF_INET (IPv4)
+                addr_dict["IP address"] = address.address
+                addr_dict["Netmask"] = address.netmask
+                addr_dict["Broadcast IP"] = address.broadcast
+            elif address.family == 23 or address.family == 17:  # AF_INET6 (IPv6)
+                addr_dict["IPv6 address"] = address.address
+                addr_dict["Netmask"] = address.netmask
+                addr_dict["Broadcast IP"] = address.broadcast
+            elif address.family == 17 or address.family == 1:  # AF_LINK or AF_PACKET (MAC)
+                addr_dict["MAC Address"] = address.address
+                addr_dict["Netmask"] = address.netmask
+                addr_dict["Broadcast MAC"] = address.broadcast
+            
+            # Only print dictionary if it has content
+            if addr_dict:
+                print_dict(addr_dict)
+            else:
+                print(f"    No recognized address type for family: {address.family}")
+    
+    #get IO statistics since boot
+    print(" * I/O Statistics:")
+    net_io = psutil.net_io_counters()
+    io_dict = {
+        "total bytes sent": format_bytes(net_io.bytes_sent),
+        "total bytes received": format_bytes(net_io.bytes_recv)
+    }
+    print_dict(io_dict)
 
 #helpers
 
@@ -54,17 +190,46 @@ def format_bytes(bytes, suffix="B"):
             return f"{bytes:.2f}{unit}{suffix}"
         bytes /= factor
 
-def main():
-    print(get_sys_header())
+def print_dict(d):   
+    if len(d) == 0:
+        return
 
-    print(f"{Fore.GREEN}System Information:{Style.RESET_ALL}")
-    print(tabulate(get_sys_info(), tablefmt="fancy_grid"))
+    max_key_len = max(len(key) for key in d.keys())
+    pad_len = max_key_len + 8
+
+    for key, val in d.items():
+        key_f = str(key).capitalize() + ":"
+        dash_len = pad_len - len(key_f)
+        dash_pad = "-" * dash_len
+        print(f"\t{key_f}{dash_pad} {val}")
     
-    print(f"{Fore.GREEN}Memory Information:{Style.RESET_ALL}")
-    sm = get_sys_mem()
-    for i in sm:
-        i[1] = format_bytes(i[1])
-    print(tabulate(sm, tablefmt="fancy_grid"))
+
+def main():
+    lb = "=" * 60
+
+    print_sys_header()
+    print(lb)
+
+    print_sys_info()        #system info
+    print(lb)
+
+    print_boot_time()       #boot time
+    print(lb)
+
+    print_cpu_info()        #CPU info
+    print(lb)
+
+    print_sys_mem()         #system memory
+    print(lb)
+
+    print_disk_use()        #disk usage
+    print(lb)
+
+    print_net_info()        #network information
+    print(lb)
+
+
+
 
     print(f"\n{Fore.MAGENTA}~ Generated by zayatzy0's System Info Tool{Style.RESET_ALL}")
 
