@@ -138,30 +138,30 @@ def print_net_info():
     for interface_name, interface_addresses in if_addrs.items():
         print(f"  - Interface: {interface_name}")
         
+        ipv4_dict = {}
+        ipv6_dict = {}
+        mac_dict = {}
+        
         for address in interface_addresses:
-            # Debug output
-            print(f"    Debug - Address family: {address.family}")
-            
-            addr_dict = {}
-            # Use the numeric values directly or constants from psutil
+            # Map the address families based on your system
             if address.family == 2:  # AF_INET (IPv4)
-                addr_dict["IP address"] = address.address
-                addr_dict["Netmask"] = address.netmask
-                addr_dict["Broadcast IP"] = address.broadcast
-            elif address.family == 23 or address.family == 17:  # AF_INET6 (IPv6)
-                addr_dict["IPv6 address"] = address.address
-                addr_dict["Netmask"] = address.netmask
-                addr_dict["Broadcast IP"] = address.broadcast
-            elif address.family == 17 or address.family == 1:  # AF_LINK or AF_PACKET (MAC)
-                addr_dict["MAC Address"] = address.address
-                addr_dict["Netmask"] = address.netmask
-                addr_dict["Broadcast MAC"] = address.broadcast
-            
-            # Only print dictionary if it has content
-            if addr_dict:
-                print_dict(addr_dict)
-            else:
-                print(f"    No recognized address type for family: {address.family}")
+                ipv4_dict["IP address"] = address.address
+                ipv4_dict["Netmask"] = address.netmask
+                ipv4_dict["Broadcast IP"] = address.broadcast
+            elif address.family == 30:  # IPv6
+                ipv6_dict["IPv6 address"] = address.address
+                ipv6_dict["Netmask"] = address.netmask
+                ipv6_dict["Scope"] = address.broadcast  # IPv6 uses scope instead of broadcast
+            elif address.family == 18:  # MAC address
+                mac_dict["MAC address"] = address.address
+        
+        # Print each address type if it has content
+        if any(v is not None and v != "" for v in ipv4_dict.values()):
+            print_dict(ipv4_dict)
+        if any(v is not None and v != "" for v in mac_dict.values()):
+            print_dict(mac_dict)
+        if any(v is not None and v != "" for v in ipv6_dict.values()):
+            print_dict(ipv6_dict)
     
     #get IO statistics since boot
     print(" * I/O Statistics:")
