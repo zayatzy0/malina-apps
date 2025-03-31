@@ -228,6 +228,8 @@ def main():
     print_net_info()        #network information
     print(lb)
 
+    print("\n")
+
 
 
 
